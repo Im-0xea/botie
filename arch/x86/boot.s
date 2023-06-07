@@ -1,8 +1,8 @@
-.text
+.section .mbr
 .globl _start
 
 .code16
-_start:
+boot:
 	# load kernel at 0x7e00
 	movb $2, %ah
 	movb $63, %al
@@ -67,5 +67,5 @@ gdt_descriptor:
 	.word gdt_end - gdt_start - 1
 	.long gdt_start
 
-. = _start + 510
-.byte 0x55, 0xAA
+. = boot + 510
+.word 0xaa55

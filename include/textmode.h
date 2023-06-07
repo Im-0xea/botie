@@ -1,3 +1,3 @@
-void kputc(const char);
-void kputs(const char *);
-void kprintf(const char * fmt, ...);
+extern void kputc(const char);
+extern void kputs(const char *);
+extern void kprintf(const char * fmt, ...);

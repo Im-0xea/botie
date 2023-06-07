@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdarg.h>
+#include <itoa.h>
 #include <asm/io.h>
 
 static uint16_t *       textmode_address = (uint16_t *) 0xb8000;
@@ -72,12 +73,30 @@ static void putc(const char c)
 		++c_x;
 	}
 }
-static void puts(char * str)
+static uint64_t ansi_interpreter(const char ** cp)
+{
+	return 0;
+}
+static void escape(const char ** ptr)
+{
+	const int b = *++*ptr;
+	if (!b || b != '[')
+		return;
+	
+	++*ptr;
+	ansi_interpreter(ptr);
+}
+
+static void puts(const char * str)
 {
 	while (1) {
 		const char c = *str;
 		if (!c)
 			break;
+		else if (c == '\033') {
+			escape(&str);
+			continue;
+		}
 		
 		putc(c);
 		++str;
@@ -86,29 +105,37 @@ static void puts(char * str)
 
 static void vprintf(const char * fmt, va_list args)
 {
+	char buf[64];
 	while (1) {
 		const char c = *fmt;
 		if (!c)
 			break;
 		
-		if (c == '%') {
-			++fmt;
-			const char fc = *fmt;
-			switch (fc) {
-			case '%':
-				putc('%');
-				++fmt;
-				break;
-			case 's':
-				puts(va_arg(args, char *));
-				break;
-			}
-		} else {
+		if (c == '\033') {
+			escape(&fmt);
+			continue;
+		} else if (c != '%') {
 			putc(c);
 			++fmt;
+			continue;
+		}
+		
+		++fmt;
+		const char fc = *fmt;
+		switch (fc) {
+		case '%':
+			putc('%');
+			++fmt;
+			break;
+		case 's':
+			puts(va_arg(args, char *));
+			break;
+		case 'd':
+			itoa(va_arg(args, const int), buf, 10);
+			puts(buf);
+			break;
 		}
 	}
-	set_cur();
 }
 
 void kputc(const char c)
@@ -126,4 +153,5 @@ void kprintf(const char * fmt, ...)
 	va_list args;
 	va_start(args, fmt);
 	vprintf(fmt, args);
+	set_cur();
 }
