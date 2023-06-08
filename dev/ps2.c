@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <asm/io.h>
 #include <textmode.h>
 
 static int key_flags;

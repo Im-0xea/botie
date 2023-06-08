@@ -1,13 +1,21 @@
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include <stdarg.h>
 #include <itoa.h>
 #include <asm/io.h>
+#include <textmode.h>
 
-static uint16_t *       textmode_address = (uint16_t *) 0xb8000;
-static const uint8_t    textmode_width   = 80, textmode_height  = 25;
-static const uint8_t    textmode_tab     = 8;
+static uint16_t *    textmode_address = (uint16_t *) 0xb8000;
+static const uint8_t
+	textmode_width  = 80,
+	textmode_height = 25,
+	textmode_tab    = 8;
 
-static uint8_t          c_x = 0, c_y = 0, c_atr = 0x0f;
+static uint8_t
+	c_x = 0,
+	c_y = 0,
+	c_atr = 0x0f;
 
 static inline uint16_t vga_entry(const unsigned char c, const uint8_t a)
 {
@@ -57,25 +65,159 @@ static void putc(const char c)
 		if (c_x) {
 			--c_x;
 			textmode_address[pos - 1] = vga_entry(' ', c_atr);
-			set_cur();
 		}
 		break;
 	case '\t':
-		if (c_x + textmode_tab < textmode_width) {
-			c_x += textmode_tab;
-			set_cur();
-		} else {
-			shift();
-		}
+		c_x = ((c_x / textmode_tab) + 1) * textmode_tab;
 		break;
 	default:
 		textmode_address[pos] = vga_entry(c, c_atr);
 		++c_x;
 	}
 }
-static uint64_t ansi_interpreter(const char ** cp)
+static void set_fg(const uint8_t col)
 {
-	return 0;
+	c_atr = (c_atr & 0xf0) | col;
+}
+
+static void set_bg(const uint8_t col)
+{
+	c_atr = (c_atr & 0x0f) | (col << 4);
+}
+static void set_reversed(void)
+{
+	const uint8_t fg = c_atr & 0x0F;
+	const uint8_t bg = (c_atr >> 4) & 0x0F;
+	set_fg(fg);
+	set_bg(bg);
+}
+static void read_num(const char ** cp, uint8_t * const num)
+{
+	while (1) {
+		const char c = **cp;
+		if (!c || c < '0' || c > '9')
+			break;
+		*num = (*num * 10) + (c - '0');
+		++*cp;
+	}
+}
+static uint8_t ansi_color(const uint8_t ansi)
+{
+	switch (ansi) {
+	case 0: return 0;
+	case 1: return 4;
+	case 2: return 2;
+	case 3: return 6;
+	case 4: return 1;
+	case 5: return 5;
+	case 6: return 3;
+	case 7: return 7;
+	default: return 0;
+	}
+}
+
+static void ansi_interpreter(const char ** cp)
+{
+	uint8_t cou = 0;
+	uint8_t sec = 0;
+	
+	read_num(cp, &cou);
+	retry:
+	switch (**cp) {
+	case 'A':
+		if (cou < c_y) {
+			cou = c_y;
+		}
+		c_y -= cou;
+		break;
+	case 'B':
+		c_y += cou;
+		break;
+	case 'C':
+		c_x += cou;
+		break;
+	case 'D':
+		c_x -= cou;
+		break;
+	case 'E':
+		c_x = 0;
+		c_y += cou;
+		break;
+	case 'F':
+		c_x = 0;
+		c_y -= cou;
+		break;
+	case 'G':
+		c_x = cou;
+		break;
+	case ';':
+		++*cp;
+		sec = cou;
+		read_num(cp, &cou);
+		const char c = **cp;
+		if (c == 'H' || c == 'f') {
+			c_x = sec;
+			c_y = cou;
+		}
+		goto retry;
+		break;
+	case 'J':
+		switch (cou) {
+		case 0:
+			//txt_set((vga_w * c_y) + c_x, vga_h * vga_w, NULL);
+			break;
+		case 1:
+			//txt_set(0, (vga_w * c_y) + c_x, NULL);
+			break;
+		case 2:
+		case 3:
+			//txt_set(0, vga_w * vga_h, NULL);
+			break;
+		}
+		break;
+	case 'K':
+		switch (cou) {
+		case 0:
+			//txt_set((vga_w * c_y) + c_x, vga_w * (c_y + 1), NULL);
+			break;
+		case 1:
+			//txt_set(vga_w * c_y, (vga_w * c_y) + c_x, NULL);
+			break;
+		}
+		break;
+	case 'S':
+	case 'T':
+		// undefined - this driver does not have a scrollback buffer
+		break;
+	case 'm':
+		if (!cou)
+			c_atr = 0x07;
+		else if (cou == 1) /* bold */
+			c_atr |= (1 << 3);
+		else if (cou == 4) /* underline */
+			c_atr |= 1;
+		else if (cou == 5) /* blinking */
+			c_atr |= (1 << 7);
+		else if (cou == 7)
+			set_reversed();
+		else if (cou == 22) /* unbold */
+			c_atr &= 0b11110111;
+		else if (cou >= 30 && cou <= 37)
+			set_fg(ansi_color(cou - 30));
+		else if (cou >= 90 && cou <= 97)
+			set_fg((cou - 82));
+		else if (cou >= 40 && cou <= 47)
+			set_bg(cou - 40);
+		else if (cou >= 100 && cou <= 107)
+			set_bg((cou - 100));
+		break;
+	case 'n':
+		if (cou == 6) {
+			kprintf("^[[%d;%dR", c_y, c_x);
+		}
+		break;
+	}
+	++*cp;
 }
 static void escape(const char ** ptr)
 {
@@ -143,12 +285,12 @@ void kputc(const char c)
 	putc(c);
 	set_cur();
 }
-void kputs(char * str)
+void kputs(const char * const str)
 {
 	puts(str);
 	set_cur();
 }
-void kprintf(const char * fmt, ...)
+void kprintf(const char * const fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);

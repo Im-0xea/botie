@@ -9,4 +9,11 @@ SECTIONS
 		*(.kentry)
 		*(.text)
 	}
+	.data :
+	{
+		*(.rodata)
+		*(.data)
+		*(COMMON)
+		*(.bss)
+	}
 }
