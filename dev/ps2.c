@@ -50,9 +50,9 @@ static char decode_ps2(const uint8_t code)
 	return '\0';
 }
 
-void keyboard_interrupt()
+void __attribute__((interrupt)) keyboard_interrupt(struct interrupt_frame * frame)
 {
 	const uint8_t scan = inb(0x60);
-	
 	key_store = decode_ps2(scan);
+	outb(0x20, 0x20);
 }

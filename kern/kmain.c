@@ -9,6 +9,7 @@ void setup_interrupt(void (*handler)())
 	
 }
 int kmain(void) {
+	idt_init();
 	kprintf("\033[31mRed\033[0m\t\033[32mGreen\033[0m\n"
 		"\033[33mYellow\033[0m\t\033[34mBlue\033[0m\n"
 		"\033[35mMagenta\033[0m\t\033[36mCyan\033[0m\n"
@@ -23,9 +24,8 @@ int kmain(void) {
 		"\033[46mCyan Background\033[0m\t\t\033[47mWhite Background\033[0m\n"
 		"\033[1mBold Text\033[0m\t\033[3mItalic Text\033[0m\n"
 		"\033[4mUnderline Text\033[0m\t\033[9mCrossed-out Text\033[0m\n"
-		"\033[5mBlinking Text\033[0m");
+		"\033[5mBlinking Text\033[0m\t\033[7mReversed Text\033[0m\n\n > ");
 	
-	setup_interrupt(keyboard_interrupt);
-	
+	asm volatile("hlt");
 	while (1);
 }

@@ -6,6 +6,14 @@
 #include <asm/io.h>
 #include <textmode.h>
 
+#if !defined(VGA_BLINKING)
+#define VGA_BLINKING 0
+#endif
+
+#if !defined(VGA_UNDERLINE)
+#define VGA_UNDERLINE 0
+#endif
+
 static uint16_t *    textmode_address = (uint16_t *) 0xb8000;
 static const uint8_t
 	textmode_width  = 80,
@@ -68,7 +76,13 @@ static void putc(const char c)
 		}
 		break;
 	case '\t':
-		c_x = ((c_x / textmode_tab) + 1) * textmode_tab;
+		const uint8_t new_x = ((c_x / textmode_tab) + 1) * textmode_tab;
+		if (new_x < textmode_width) {
+			c_x = new_x;
+		} else {
+			c_x = 0;
+			shift();
+		}
 		break;
 	default:
 		textmode_address[pos] = vga_entry(c, c_atr);
@@ -88,8 +102,8 @@ static void set_reversed(void)
 {
 	const uint8_t fg = c_atr & 0x0F;
 	const uint8_t bg = (c_atr >> 4) & 0x0F;
-	set_fg(fg);
-	set_bg(bg);
+	set_fg(bg);
+	set_bg(fg);
 }
 static void read_num(const char ** cp, uint8_t * const num)
 {
@@ -194,10 +208,14 @@ static void ansi_interpreter(const char ** cp)
 			c_atr = 0x07;
 		else if (cou == 1) /* bold */
 			c_atr |= (1 << 3);
+#if VGA_UNDERLINE
 		else if (cou == 4) /* underline */
 			c_atr |= 1;
+#endif
+#if VGA_BLINKING
 		else if (cou == 5) /* blinking */
 			c_atr |= (1 << 7);
+#endif
 		else if (cou == 7)
 			set_reversed();
 		else if (cou == 22) /* unbold */
@@ -205,11 +223,11 @@ static void ansi_interpreter(const char ** cp)
 		else if (cou >= 30 && cou <= 37)
 			set_fg(ansi_color(cou - 30));
 		else if (cou >= 90 && cou <= 97)
-			set_fg((cou - 82));
+			set_fg(8 + ansi_color(cou - 90));
 		else if (cou >= 40 && cou <= 47)
-			set_bg(cou - 40);
+			set_bg(ansi_color(cou - 40));
 		else if (cou >= 100 && cou <= 107)
-			set_bg((cou - 100));
+			set_bg(8 + ansi_color(cou - 100));
 		break;
 	case 'n':
 		if (cou == 6) {
